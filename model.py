@@ -46,6 +46,7 @@ from keras import backend as K
 from keras.applications import imagenet_utils
 from keras.utils import conv_utils
 from keras.utils.data_utils import get_file
+from keras import regularizers
 
 WEIGHTS_PATH_X = "https://github.com/bonlime/keras-deeplab-v3-plus/releases/download/1.1/deeplabv3_xception_tf_dim_ordering_tf_kernels.h5"
 WEIGHTS_PATH_MOBILE = "https://github.com/bonlime/keras-deeplab-v3-plus/releases/download/1.1/deeplabv3_mobilenetv2_tf_dim_ordering_tf_kernels.h5"
@@ -230,7 +231,7 @@ def _make_divisible(v, divisor, min_value=None):
     return new_v
 
 
-def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, skip_connection, rate=1):
+def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, skip_connection, rate=1, drop = 0):
     in_channels = inputs._keras_shape[-1]
     pointwise_conv_filters = int(filters * alpha)
     pointwise_filters = _make_divisible(pointwise_conv_filters, 8)
@@ -245,6 +246,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, ski
         x = BatchNormalization(epsilon=1e-3, momentum=0.999,
                                name=prefix + 'expand_BN')(x)
         x = Activation(relu6, name=prefix + 'expand_relu')(x)
+        x = Dropout(drop) (x)
     else:
         prefix = 'expanded_conv_'
     # Depthwise
@@ -255,6 +257,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, ski
                            name=prefix + 'depthwise_BN')(x)
 
     x = Activation(relu6, name=prefix + 'depthwise_relu')(x)
+    x = Dropout(drop) (x)
 
     # Project
     x = Conv2D(pointwise_filters,
@@ -268,11 +271,11 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, ski
 
     # if in_channels == pointwise_filters and stride == 1:
     #    return Add(name='res_connect_' + str(block_id))([inputs, x])
-
+    x = Dropout(drop) (x)
     return x
 
 
-def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3), classes=21, backbone='mobilenetv2', OS=16, alpha=1.):
+def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3), classes=21, backbone='mobilenetv2', OS=16, alpha=1., reg = 0, drop = 0):
     """ Instantiates the Deeplabv3+ architecture
 
     Optionally loads weights pre-trained
@@ -387,46 +390,46 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, input_shape=(512, 512, 3)
         x = Activation(relu6, name='Conv_Relu6')(x)
 
         x = _inverted_res_block(x, filters=16, alpha=alpha, stride=1,
-                                expansion=1, block_id=0, skip_connection=False)
+                                expansion=1, block_id=0, skip_connection=False, drop = drop)
 
         x = _inverted_res_block(x, filters=24, alpha=alpha, stride=2,
-                                expansion=6, block_id=1, skip_connection=False)
+                                expansion=6, block_id=1, skip_connection=False, drop = drop)
         x = _inverted_res_block(x, filters=24, alpha=alpha, stride=1,
-                                expansion=6, block_id=2, skip_connection=True)
+                                expansion=6, block_id=2, skip_connection=True, drop = drop)
 
         x = _inverted_res_block(x, filters=32, alpha=alpha, stride=2,
-                                expansion=6, block_id=3, skip_connection=False)
+                                expansion=6, block_id=3, skip_connection=False, drop = drop)
         x = _inverted_res_block(x, filters=32, alpha=alpha, stride=1,
-                                expansion=6, block_id=4, skip_connection=True)
+                                expansion=6, block_id=4, skip_connection=True, drop = drop)
         x = _inverted_res_block(x, filters=32, alpha=alpha, stride=1,
-                                expansion=6, block_id=5, skip_connection=True)
+                                expansion=6, block_id=5, skip_connection=True, drop = drop)
 
         # stride in block 6 changed from 2 -> 1, so we need to use rate = 2
         x = _inverted_res_block(x, filters=64, alpha=alpha, stride=1,  # 1!
-                                expansion=6, block_id=6, skip_connection=False)
+                                expansion=6, block_id=6, skip_connection=False, drop = drop)
         x = _inverted_res_block(x, filters=64, alpha=alpha, stride=1, rate=2,
-                                expansion=6, block_id=7, skip_connection=True)
+                                expansion=6, block_id=7, skip_connection=True, drop = drop)
         x = _inverted_res_block(x, filters=64, alpha=alpha, stride=1, rate=2,
-                                expansion=6, block_id=8, skip_connection=True)
+                                expansion=6, block_id=8, skip_connection=True, drop = drop)
         x = _inverted_res_block(x, filters=64, alpha=alpha, stride=1, rate=2,
-                                expansion=6, block_id=9, skip_connection=True)
+                                expansion=6, block_id=9, skip_connection=True, drop = drop)
 
         x = _inverted_res_block(x, filters=96, alpha=alpha, stride=1, rate=2,
-                                expansion=6, block_id=10, skip_connection=False)
+                                expansion=6, block_id=10, skip_connection=False, drop = drop)
         x = _inverted_res_block(x, filters=96, alpha=alpha, stride=1, rate=2,
-                                expansion=6, block_id=11, skip_connection=True)
+                                expansion=6, block_id=11, skip_connection=True, drop = drop)
         x = _inverted_res_block(x, filters=96, alpha=alpha, stride=1, rate=2,
-                                expansion=6, block_id=12, skip_connection=True)
+                                expansion=6, block_id=12, skip_connection=True, drop = drop)
 
         x = _inverted_res_block(x, filters=160, alpha=alpha, stride=1, rate=2,  # 1!
-                                expansion=6, block_id=13, skip_connection=False)
+                                expansion=6, block_id=13, skip_connection=False, drop = drop)
         x = _inverted_res_block(x, filters=160, alpha=alpha, stride=1, rate=4,
-                                expansion=6, block_id=14, skip_connection=True)
+                                expansion=6, block_id=14, skip_connection=True, drop = drop)
         x = _inverted_res_block(x, filters=160, alpha=alpha, stride=1, rate=4,
-                                expansion=6, block_id=15, skip_connection=True)
+                                expansion=6, block_id=15, skip_connection=True, drop = drop)
 
         x = _inverted_res_block(x, filters=320, alpha=alpha, stride=1, rate=4,
-                                expansion=6, block_id=16, skip_connection=False)
+                                expansion=6, block_id=16, skip_connection=False, drop = drop)
 
     # end of feature extractor
 
